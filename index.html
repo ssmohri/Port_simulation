@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Port Truck Network Simulation Prototype</title>
+<style>
+  :root{
+    --bg:#f6f8fb; --panel:#ffffff; --line:#d9e1ea; --text:#1f2937; --muted:#6b7280;
+    --accent:#1d4ed8; --ok:#0f766e; --warn:#b45309; --bad:#b91c1c; --soft:#eef4ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:Arial,Helvetica,sans-serif;color:var(--text)}
+  .wrap{max-width:1500px;margin:0 auto;padding:16px}
+  h1{margin:0 0 8px;font-size:28px}
+  .sub{margin:0 0 16px;color:var(--muted);line-height:1.45}
+  .layout{display:grid;grid-template-columns:360px 1fr;gap:16px;align-items:start}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(15,23,42,.04)}
+  .controls h2,.main h2{margin:0 0 10px;font-size:18px}
+  .field{margin-bottom:10px}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  label{display:block;margin-bottom:4px;font-size:13px;color:var(--muted)}
+  input,select,button{font-size:14px}
+  input,select{width:100%;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#fff}
+  input[type="range"]{padding:0}
+  .section-title{margin:14px 0 8px;padding-top:10px;border-top:1px solid var(--line);font-weight:bold;font-size:14px}
+  .hint{font-size:12px;color:var(--muted);line-height:1.4;margin-top:4px}
+  .btnrow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  button{border:none;border-radius:12px;padding:10px 12px;cursor:pointer}
+  .primary{background:var(--accent);color:white}
+  .secondary{background:#e5edff;color:#183b9d}
+  .status{font-size:13px;color:var(--muted);line-height:1.4;margin-top:8px}
+  .main{display:grid;gap:16px}
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+  .kpi{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}
+  .kpi .t{font-size:12px;color:var(--muted);margin-bottom:6px}
+  .kpi .v{font-size:22px;font-weight:bold}
+  .viz{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+  .chart-grid{display:grid;gap:16px}
+  canvas{width:100%;display:block;background:#fbfcfe;border:1px solid var(--line);border-radius:12px}
+  #networkCanvas{height:620px}
+  .small-chart{height:180px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--muted)}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .checkbox-list{display:grid;gap:8px}
+  .checkrow{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px}
+  .mini{font-size:12px;color:var(--muted)}
+  .caption{font-size:13px;color:var(--muted);margin-top:8px;line-height:1.4}
+  @media (max-width: 1200px){
+    .layout,.viz{grid-template-columns:1fr}
+    .kpis{grid-template-columns:repeat(2,1fr)}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Port Truck Network Simulation Prototype</h1>
+  <p class="sub">
+    This is a simple browser-based example of a freight traffic simulation for teaching. Trucks depart from a schematic
+    Port of Melbourne node, choose destinations across a small network, and follow the shortest available path.
+    You can close or reopen links, change demand and departure patterns, and see how routes, travel times, and network use change.
+  </p>
+
+  <div class="layout">
+    <div class="panel controls">
+      <h2>Simulation controls</h2>
+
+      <div class="section-title">Demand and timing</div>
+      <div class="grid-2">
+        <div class="field">
+          <label>Total trucks</label>
+          <input id="truckCount" type="number" min="10" max="400" value="400" />
+        </div>
+        <div class="field">
+          <label>Simulation hours</label>
+          <input id="simHours" type="number" min="4" max="24" value="12" />
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label>Start hour</label>
+          <input id="startHour" type="number" min="0" max="23" value="6" />
+        </div>
+        <div class="field">
+          <label>Peak departure hour</label>
+          <input id="peakHour" type="number" min="0" max="23" value="9" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Peak multiplier</label>
+        <input id="peakStrength" type="range" min="1" max="4" step="0.1" value="2.0" />
+        <div class="hint">At the peak hour, departures are this many times the average hourly level. Value: <span id="peakStrengthVal">2.0</span></div>
+      </div>
+
+      <div class="section-title">Truck movement</div>
+      <div class="grid-2">
+        <div class="field">
+          <label>Base speed (km/h)</label>
+          <input id="baseSpeed" type="number" min="20" max="80" value="60" />
+        </div>
+        <div class="field">
+          <label>Dispatch spread within each hour (min)</label>
+          <input id="dispatchSpread" type="number" min="5" max="60" value="60" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Animation speed</label>
+        <select id="animSpeed">
+          <option value="0.2" selected>0.2x</option>
+          <option value="0.5">0.5x</option>
+          <option value="1">1x</option>
+          <option value="2">2x</option>
+          <option value="5">5x</option>
+          <option value="10">10x</option>
+        </select>
+      </div>
+
+      <div class="section-title">Destination mix</div>
+      <div class="grid-3">
+        <div class="field">
+          <label>North (%)</label>
+          <input id="destNorth" type="number" min="0" max="100" value="30" />
+        </div>
+        <div class="field">
+          <label>East (%)</label>
+          <input id="destEast" type="number" min="0" max="100" value="25" />
+        </div>
+        <div class="field">
+          <label>South-east (%)</label>
+          <input id="destSE" type="number" min="0" max="100" value="25" />
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label>West (%)</label>
+          <input id="destWest" type="number" min="0" max="100" value="20" />
+        </div>
+        <div class="field">
+          <label>Unallocated</label>
+          <input id="mixCheck" type="text" value="Auto-normalised" disabled />
+        </div>
+      </div>
+
+      <div class="section-title">Close links in the network</div>
+      <div class="checkbox-list" id="linkControls"></div>
+      <div class="hint">When a link is closed, the app recalculates shortest paths live. If a destination becomes unreachable, those trucks are counted as unserved.</div>
+
+      <div class="btnrow">
+        <button class="primary" id="runBtn">Run simulation</button>
+        <button class="secondary" id="resetBtn">Reset links</button>
+      </div>
+      <div class="status" id="statusText">Ready. Press <strong>Run simulation</strong>.</div>
+    </div>
+
+    <div class="main">
+      <div class="panel">
+        <h2>Key outputs</h2>
+        <div class="kpis">
+          <div class="kpi"><div class="t">Average trip time</div><div class="v" id="avgTrip">-</div></div>
+          <div class="kpi"><div class="t">Total VKT</div><div class="v" id="totalDist">-</div></div>
+          <div class="kpi"><div class="t">Unserved trucks</div><div class="v" id="unserved">-</div></div>
+          <div class="kpi"><div class="t">Longest shortest path</div><div class="v" id="maxPath">-</div></div>
+          <div class="kpi"><div class="t">Peak active trucks</div><div class="v" id="peakActive">-</div></div>
+          <div class="kpi"><div class="t">Closed links</div><div class="v" id="closedCount">-</div></div>
+        </div>
+        <div class="caption" id="summaryNote">Run the model to compare routing under different network conditions.</div>
+      </div>
+
+      <div class="viz">
+        <div class="panel">
+          <h2>Network map and truck movement</h2>
+          <canvas id="networkCanvas" width="920" height="620"></canvas>
+          <div class="legend">
+            <span><span class="dot" style="background:#1d4ed8"></span>Moving trucks</span>
+            <span><span class="dot" style="background:#0f766e"></span>Port / destination nodes</span>
+            <span><span class="dot" style="background:#94a3b8"></span>Open links</span>
+            <span><span class="dot" style="background:#b91c1c"></span>Closed links</span>
+          </div>
+          <div class="caption">
+            The map is schematic rather than geographically exact. It shows how a map-based teaching app could work:
+            network links can be closed, shortest paths are recalculated in the app, and trucks animate along the updated routes.
+          </div>
+        </div>
+
+        <div class="chart-grid">
+          <div class="panel">
+            <h2>Departures by hour</h2>
+            <canvas id="departCanvas" class="small-chart" width="420" height="180"></canvas>
+          </div>
+          <div class="panel">
+            <h2>Active trucks over time</h2>
+            <canvas id="activeCanvas" class="small-chart" width="420" height="180"></canvas>
+          </div>
+          <div class="panel">
+            <h2>Link loads</h2>
+            <canvas id="loadCanvas" class="small-chart" width="420" height="180"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const el = id => document.getElementById(id);
+  const fmt = {
+    mins(v){ return `${Math.round(v)} min`; },
+    km(v){ return `${Math.round(v)} km`; },
+    num(v){ return `${Math.round(v)}`; }
+  };
+
+  const nodes = {
+    P:  { id:'P',  name:'Port of Melbourne', x:140, y:360, kind:'port' },
+    A:  { id:'A',  name:'West Gate',         x:270, y:360, kind:'junction' },
+    B:  { id:'B',  name:'North Hub',         x:400, y:220, kind:'junction' },
+    C:  { id:'C',  name:'CBD East',          x:420, y:360, kind:'junction' },
+    D:  { id:'D',  name:'South-East Hub',    x:470, y:500, kind:'junction' },
+    E:  { id:'E',  name:'Western Ring',      x:580, y:220, kind:'junction' },
+    F:  { id:'F',  name:'Outer East',        x:700, y:340, kind:'junction' },
+    G:  { id:'G',  name:'Outer South',       x:620, y:520, kind:'junction' },
+    N1: { id:'N1', name:'Northern DC',       x:790, y:130, kind:'dest' },
+    E1: { id:'E1', name:'Eastern DC',        x:840, y:320, kind:'dest' },
+    S1: { id:'S1', name:'South-East DC',     x:790, y:560, kind:'dest' },
+    W1: { id:'W1', name:'Western DC',        x:760, y:470, kind:'dest' }
+  };
+
+  const baseLinks = [
+    { id:'P-A', a:'P', b:'A', dist:8 },
+    { id:'A-B', a:'A', b:'B', dist:12 },
+    { id:'A-C', a:'A', b:'C', dist:10 },
+    { id:'A-D', a:'A', b:'D', dist:14 },
+    { id:'B-C', a:'B', b:'C', dist:9 },
+    { id:'B-E', a:'B', b:'E', dist:11 },
+    { id:'C-D', a:'C', b:'D', dist:9 },
+    { id:'C-F', a:'C', b:'F', dist:16 },
+    { id:'D-G', a:'D', b:'G', dist:12 },
+    { id:'E-F', a:'E', b:'F', dist:10 },
+    { id:'F-G', a:'F', b:'G', dist:11 },
+    { id:'E-N1', a:'E', b:'N1', dist:14 },
+    { id:'F-E1', a:'F', b:'E1', dist:12 },
+    { id:'G-S1', a:'G', b:'S1', dist:13 },
+    { id:'G-W1', a:'G', b:'W1', dist:9 },
+    { id:'E-W1', a:'E', b:'W1', dist:18 },
+    { id:'F-S1', a:'F', b:'S1', dist:20 }
+  ];
+
+  const destinationMap = { north:'N1', east:'E1', se:'S1', west:'W1' };
+
+  let state = {
+    closed: new Set(['D-G']),
+    sim: null,
+    animToken: 0
+  };
+
+  function buildLinkControls(){
+    const box = el('linkControls');
+    box.innerHTML = '';
+    baseLinks.forEach(link => {
+      const row = document.createElement('label');
+      row.className = 'checkrow';
+      row.innerHTML = `
+        <input type="checkbox" data-link="${link.id}" ${state.closed.has(link.id) ? 'checked' : ''} />
+        <span>${link.id} <span class="mini">(${link.dist} km)</span></span>
+        <span class="mini">close</span>
+      `;
+      box.appendChild(row);
+    });
+    box.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        if (cb.checked) state.closed.add(cb.dataset.link);
+        else state.closed.delete(cb.dataset.link);
+      });
+    });
+  }
+
+  function syncPeakLabel(){
+    el('peakStrengthVal').textContent = Number(el('peakStrength').value).toFixed(1);
+  }
+
+  function getParams(){
+    return {
+      truckCount: +el('truckCount').value,
+      simHours: +el('simHours').value,
+      startHour: +el('startHour').value,
+      peakHour: +el('peakHour').value,
+      peakStrength: +el('peakStrength').value,
+      baseSpeed: +el('baseSpeed').value,
+      dispatchSpread: +el('dispatchSpread').value,
+      animSpeed: +el('animSpeed').value,
+      mix: {
+        north: +el('destNorth').value,
+        east: +el('destEast').value,
+        se: +el('destSE').value,
+        west: +el('destWest').value
+      }
+    };
+  }
+
+  function buildHourlyCounts(p){
+    const hours = p.simHours;
+    const peakIndex = Math.max(0, Math.min(hours - 1, Math.round(p.peakHour - p.startHour)));
+    const peakMultiplier = Math.max(1, p.peakStrength);
+
+    const weights = [];
+    for (let h = 0; h < hours; h++) {
+      const dist = Math.abs(h - peakIndex);
+      const factor = Math.exp(-dist);
+      weights.push(1 + (peakMultiplier - 1) * factor);
+    }
+    const sumW = weights.reduce((a,b)=>a+b,0);
+    const targets = weights.map(w => (w / sumW) * p.truckCount);
+    const counts = targets.map(v => Math.floor(v));
+    let assigned = counts.reduce((a,b)=>a+b,0);
+    const rem = targets.map((v,i) => ({i, r: v - Math.floor(v)})).sort((a,b)=>b.r-a.r);
+    let k = 0;
+    while (assigned < p.truckCount) {
+      counts[rem[k % rem.length].i] += 1;
+      assigned++;
+      k++;
+    }
+    return counts;
+  }
+
+  function normaliseMix(mix){
+    const total = mix.north + mix.east + mix.se + mix.west;
+    if (total <= 0) return {north:0.25, east:0.25, se:0.25, west:0.25};
+    return {
+      north: mix.north / total,
+      east: mix.east / total,
+      se: mix.se / total,
+      west: mix.west / total
+    };
+  }
+
+  function sampleDest(mix){
+    const r = Math.random();
+    let s = 0;
+    for (const k of ['north','east','se','west']) {
+      s += mix[k];
+      if (r <= s) return destinationMap[k];
+    }
+    return destinationMap.west;
+  }
+
+  function adjacency(){
+    const adj = {};
+    Object.keys(nodes).forEach(n => adj[n] = []);
+    baseLinks.forEach(link => {
+      if (state.closed.has(link.id)) return;
+      adj[link.a].push({to: link.b, dist: link.dist, linkId: link.id});
+      adj[link.b].push({to: link.a, dist: link.dist, linkId: link.id});
+    });
+    return adj;
+  }
+
+  function dijkstra(source, target, adj){
+    const dist = {};
+    const prev = {};
+    const prevLink = {};
+    const unvisited = new Set(Object.keys(adj));
+    Object.keys(adj).forEach(k => dist[k] = Infinity);
+    dist[source] = 0;
+
+    while (unvisited.size) {
+      let u = null, best = Infinity;
+      unvisited.forEach(n => {
+        if (dist[n] < best) { best = dist[n]; u = n; }
+      });
+      if (u === null) break;
+      unvisited.delete(u);
+      if (u === target) break;
+      adj[u].forEach(edge => {
+        if (!unvisited.has(edge.to)) return;
+        const alt = dist[u] + edge.dist;
+        if (alt < dist[edge.to]) {
+          dist[edge.to] = alt;
+          prev[edge.to] = u;
+          prevLink[edge.to] = edge.linkId;
+        }
+      });
+    }
+
+    if (!isFinite(dist[target])) return null;
+
+    const nodePath = [];
+    const linkPath = [];
+    let cur = target;
+    while (cur !== undefined) {
+      nodePath.push(cur);
+      if (prevLink[cur]) linkPath.push(prevLink[cur]);
+      cur = prev[cur];
+    }
+    nodePath.reverse();
+    linkPath.reverse();
+    return { distance: dist[target], nodes: nodePath, links: linkPath };
+  }
+
+  function buildPolyline(nodePath){
+    return nodePath.map(n => ({x: nodes[n].x, y: nodes[n].y}));
+  }
+
+  function polylineLength(points){
+    let len = 0;
+    for (let i=1;i<points.length;i++){
+      const dx = points[i].x - points[i-1].x;
+      const dy = points[i].y - points[i-1].y;
+      len += Math.hypot(dx, dy);
+    }
+    return len;
+  }
+
+  function pointAlongPolyline(points, ratio){
+    if (ratio <= 0) return points[0];
+    if (ratio >= 1) return points[points.length - 1];
+    const total = polylineLength(points);
+    let target = total * ratio;
+    for (let i=1;i<points.length;i++){
+      const a = points[i-1], b = points[i];
+      const seg = Math.hypot(b.x-a.x, b.y-a.y);
+      if (target <= seg) {
+        const t = target / seg;
+        return {x: a.x + (b.x-a.x)*t, y: a.y + (b.y-a.y)*t};
+      }
+      target -= seg;
+    }
+    return points[points.length - 1];
+  }
+
+  function simulate(){
+    const p = getParams();
+    const adj = adjacency();
+    const mix = normaliseMix(p.mix);
+    const hourlyCounts = buildHourlyCounts(p);
+    const trips = [];
+    const departuresByHour = {};
+    const linkLoads = {};
+    const activeByMinute = [];
+
+    let id = 1;
+    hourlyCounts.forEach((count, hIndex) => {
+      const hourStart = (p.startHour + hIndex) * 60;
+      for (let j=0;j<count;j++){
+        const depart = hourStart + Math.floor(Math.random() * p.dispatchSpread);
+        const dest = sampleDest(mix);
+        const sp = dijkstra('P', dest, adj);
+
+        if (!sp) {
+          trips.push({ id:id++, departMinute:depart, dest, served:false });
+          continue;
+        }
+
+        const travelMins = (sp.distance / p.baseSpeed) * 60;
+        const arr = depart + travelMins;
+        departuresByHour[Math.floor(depart/60)] = (departuresByHour[Math.floor(depart/60)] || 0) + 1;
+        sp.links.forEach(lid => { linkLoads[lid] = (linkLoads[lid] || 0) + 1; });
+
+        trips.push({
+          id:id++,
+          departMinute:depart,
+          arrivalMinute:arr,
+          dest,
+          served:true,
+          distance:sp.distance,
+          travelMins,
+          pathNodes:sp.nodes,
+          pathLinks:sp.links,
+          polyline:buildPolyline(sp.nodes)
+        });
+      }
+    });
+
+    const startMinute = p.startHour * 60;
+    const endMinute = startMinute + p.simHours * 60;
+    let peakActive = 0;
+    for (let m=startMinute; m<=endMinute; m++) {
+      let active = 0;
+      trips.forEach(t => {
+        if (t.served && t.departMinute <= m && t.arrivalMinute > m) active++;
+      });
+      activeByMinute.push({t:m, value:active});
+      peakActive = Math.max(peakActive, active);
+    }
+
+    const served = trips.filter(t => t.served);
+    return {
+      params:p,
+      trips,
+      departuresByHour,
+      activeByMinute,
+      linkLoads,
+      metrics:{
+        avgTravel: served.length ? served.reduce((s,t)=>s+t.travelMins,0)/served.length : 0,
+        totalDist: served.reduce((s,t)=>s+t.distance,0),
+        unserved: trips.filter(t => !t.served).length,
+        maxPath: served.length ? Math.max(...served.map(t=>t.distance)) : 0,
+        peakActive,
+        closedCount: state.closed.size
+      }
+    };
+  }
+
+  function drawNetworkFrame(sim, minute){
+    const canvas = el('networkCanvas');
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0,0,w,h);
+
+    ctx.fillStyle = '#e0f2fe';
+    ctx.fillRect(0, 250, 170, 220);
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 15px Arial';
+    ctx.fillText('Port precinct', 26, 278);
+
+    baseLinks.forEach(link => {
+      const a = nodes[link.a], b = nodes[link.b];
+      const closed = state.closed.has(link.id);
+      ctx.strokeStyle = closed ? '#b91c1c' : '#94a3b8';
+      ctx.lineWidth = closed ? 4 : 3;
+      if (closed) ctx.setLineDash([8,7]); else ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2;
+      ctx.fillStyle = '#475569';
+      ctx.font = '11px Arial';
+      ctx.fillText(`${link.id} (${link.dist})`, mx - 28, my - 6);
+    });
+
+    Object.values(nodes).forEach(n => {
+      ctx.beginPath();
+      ctx.fillStyle = n.kind === 'port' ? '#0f766e' : (n.kind === 'dest' ? '#1d4ed8' : '#ffffff');
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 2;
+      ctx.arc(n.x, n.y, n.kind === 'junction' ? 12 : 16, 0, Math.PI*2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = n.kind === 'junction' ? '#111827' : '#ffffff';
+      ctx.font = 'bold 12px Arial';
+      const tw = ctx.measureText(n.id).width;
+      ctx.fillText(n.id, n.x - tw/2, n.y + 4);
+
+      ctx.fillStyle = '#111827';
+      ctx.font = '12px Arial';
+      ctx.fillText(n.name, n.x + 18, n.y - 10);
+    });
+
+    const activeTrips = sim.trips.filter(t => t.served && t.departMinute <= minute && t.arrivalMinute > minute);
+    activeTrips.forEach(t => {
+      const ratio = (minute - t.departMinute) / (t.arrivalMinute - t.departMinute);
+      const pt = pointAlongPolyline(t.polyline, ratio);
+      ctx.beginPath();
+      ctx.fillStyle = '#1d4ed8';
+      ctx.arc(pt.x, pt.y, 5, 0, Math.PI*2);
+      ctx.fill();
+    });
+
+    const hh = String(Math.floor(minute/60)).padStart(2,'0');
+    const mm = String(Math.floor(minute%60)).padStart(2,'0');
+    ctx.fillStyle = '#111827';
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText(`Time: ${hh}:${mm}`, 28, 34);
+    ctx.font = '13px Arial';
+    ctx.fillText(`Active trucks: ${activeTrips.length}`, 150, 34);
+    ctx.fillText(`Closed links: ${state.closed.size}`, 280, 34);
+
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '12px Arial';
+    ctx.fillText('Shortest paths are recalculated from the currently open network. Closed links are shown in red.', 28, 598);
+  }
+
+  function drawLineChart(canvasId, series, colour, yFormatter){
+    const canvas = el(canvasId);
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle = '#fbfcfe';
+    ctx.fillRect(0,0,w,h);
+
+    const pad = {l:42,r:10,t:12,b:26};
+    const x0 = pad.l, y0 = h-pad.b, cw = w-pad.l-pad.r, ch = h-pad.t-pad.b;
+    const tMin = series[0]?.t ?? 0;
+    const tMax = series[series.length-1]?.t ?? 1;
+    const vMax = Math.max(...series.map(d=>d.value),1);
+
+    ctx.strokeStyle = '#d9e1ea';
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '10px Arial';
+    for(let i=0;i<=4;i++){
+      const y = y0 - ch*i/4;
+      ctx.beginPath(); ctx.moveTo(x0,y); ctx.lineTo(x0+cw,y); ctx.stroke();
+      ctx.fillText(yFormatter(Math.round(vMax*i/4)), 6, y+3);
+    }
+    ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x0,y0-ch); ctx.stroke();
+
+    const xScale = t => x0 + ((t-tMin)/((tMax-tMin)||1))*cw;
+    const yScale = v => y0 - (v/vMax)*ch;
+
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    series.forEach((d,i)=>{
+      const x = xScale(d.t), y = yScale(d.value);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  }
+
+  function drawBarChart(canvasId, valuesMap, label, colour, startHour, endHour){
+    const canvas = el(canvasId);
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle = '#fbfcfe';
+    ctx.fillRect(0,0,w,h);
+
+    const pad = {l:42,r:10,t:12,b:26};
+    const x0 = pad.l, y0 = h-pad.b, cw = w-pad.l-pad.r, ch = h-pad.t-pad.b;
+    const hours = [];
+    for(let hr=startHour; hr<=endHour; hr++) hours.push(hr);
+    const vals = hours.map(hr => valuesMap[hr] || 0);
+    const vMax = Math.max(...vals,1);
+
+    ctx.strokeStyle = '#d9e1ea';
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '10px Arial';
+    for(let i=0;i<=4;i++){
+      const y = y0 - ch*i/4;
+      ctx.beginPath(); ctx.moveTo(x0,y); ctx.lineTo(x0+cw,y); ctx.stroke();
+      ctx.fillText(String(Math.round(vMax*i/4)), 6, y+3);
+    }
+    ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x0,y0-ch); ctx.stroke();
+
+    const band = cw / hours.length;
+    hours.forEach((hr,i)=>{
+      const x = x0 + i*band + band*0.2;
+      const width = band*0.45;
+      const val = valuesMap[hr] || 0;
+      const hh = ch * val / vMax;
+      ctx.fillStyle = colour;
+      ctx.fillRect(x, y0-hh, width, hh);
+      ctx.fillStyle = '#6b7280';
+      ctx.fillText(String(hr), x+4, y0+14);
+    });
+
+    ctx.fillStyle = colour;
+    ctx.fillRect(w-110, 14, 8, 8);
+    ctx.fillStyle = '#111827';
+    ctx.font = '11px Arial';
+    ctx.fillText(label, w-98, 22);
+  }
+
+  function drawLinkLoads(canvasId, linkLoads){
+    const canvas = el(canvasId);
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle = '#fbfcfe';
+    ctx.fillRect(0,0,w,h);
+
+    const items = baseLinks.map(l => ({id:l.id, v:linkLoads[l.id] || 0}));
+    const pad = {l:42,r:10,t:12,b:55};
+    const x0 = pad.l, y0 = h-pad.b, cw = w-pad.l-pad.r, ch = h-pad.t-pad.b;
+    const vMax = Math.max(...items.map(d=>d.v),1);
+
+    ctx.strokeStyle = '#d9e1ea';
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '10px Arial';
+    for(let i=0;i<=4;i++){
+      const y = y0 - ch*i/4;
+      ctx.beginPath(); ctx.moveTo(x0,y); ctx.lineTo(x0+cw,y); ctx.stroke();
+      ctx.fillText(String(Math.round(vMax*i/4)), 6, y+3);
+    }
+    ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x0,y0-ch); ctx.stroke();
+
+    const band = cw / items.length;
+    items.forEach((d,i)=>{
+      const x = x0 + i*band + band*0.1;
+      const width = band*0.75;
+      const hh = ch * d.v / vMax;
+      ctx.fillStyle = '#0f766e';
+      ctx.fillRect(x, y0-hh, width, hh);
+      ctx.fillStyle = '#6b7280';
+      ctx.save();
+      ctx.translate(x+3, y0+18);
+      ctx.rotate(-0.6);
+      ctx.fillText(d.id, 0, 0);
+      ctx.restore();
+    });
+  }
+
+  function renderKPIs(sim){
+    el('avgTrip').textContent = fmt.mins(sim.metrics.avgTravel);
+    el('totalDist').textContent = fmt.km(sim.metrics.totalDist);
+    el('unserved').textContent = fmt.num(sim.metrics.unserved);
+    el('maxPath').textContent = fmt.km(sim.metrics.maxPath);
+    el('peakActive').textContent = fmt.num(sim.metrics.peakActive);
+    el('closedCount').textContent = fmt.num(sim.metrics.closedCount);
+    el('summaryNote').innerHTML =
+      `This run sent <strong>${sim.trips.length - sim.metrics.unserved}</strong> trucks through the network and left <strong>${sim.metrics.unserved}</strong> unserved due to network disconnection.
+      Link closures are recalculated immediately through shortest-path logic in the app.`;
+  }
+
+  function animate(sim){
+    state.animToken += 1;
+    const token = state.animToken;
+    const speed = +el('animSpeed').value;
+    const startMinute = sim.params.startHour * 60;
+    const endMinute = startMinute + sim.params.simHours * 60;
+    const span = endMinute - startMinute;
+    let frame = 0;
+    const frames = 240;
+
+    function tick(){
+      if(token !== state.animToken) return;
+      const ratio = Math.min(1, frame / frames);
+      const minute = startMinute + ratio * span;
+      drawNetworkFrame(sim, minute);
+      frame += speed;
+      if(frame <= frames) requestAnimationFrame(tick);
+    }
+    tick();
+  }
+
+  function run(){
+    syncPeakLabel();
+    el('statusText').innerHTML = 'Running simulation...';
+    const sim = simulate();
+    state.sim = sim;
+    renderKPIs(sim);
+    drawBarChart('departCanvas', sim.departuresByHour, 'Departures', '#1d4ed8', sim.params.startHour, sim.params.startHour + sim.params.simHours - 1);
+    drawLineChart('activeCanvas', sim.activeByMinute, '#b45309', v => String(v));
+    drawLinkLoads('loadCanvas', sim.linkLoads);
+    animate(sim);
+    el('statusText').innerHTML = 'Simulation complete. Change links or parameters and run again.';
+  }
+
+  function resetLinks(){
+    state.closed.clear();
+    document.querySelectorAll('#linkControls input[type="checkbox"]').forEach(cb => cb.checked = false);
+    run();
+  }
+
+  el('runBtn').addEventListener('click', run);
+  el('resetBtn').addEventListener('click', resetLinks);
+  el('peakStrength').addEventListener('input', syncPeakLabel);
+
+  buildLinkControls();
+  syncPeakLabel();
+  run();
+})();
+</script>
+</body>
+</html>
